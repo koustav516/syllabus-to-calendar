@@ -2,6 +2,7 @@
 "use client";
 import { useState } from "react";
 import type { SyllabusEvent } from "../lib/types";
+import CalendarView from "../components/CalendarView";
 
 export default function ParsePage() {
     const [text, setText] = useState("");
@@ -82,76 +83,87 @@ export default function ParsePage() {
     return (
         <div
             style={{
-                maxWidth: 980,
+                maxWidth: 1100,
                 margin: "2rem auto",
                 fontFamily: "system-ui",
             }}
         >
             <h1>Syllabus → Calendar</h1>
 
-            <section style={{ marginBottom: 18 }}>
-                <h3>Paste syllabus text</h3>
-                <textarea
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    rows={10}
+            <div style={{ display: "grid", gap: 16 }}>
+                <div
                     style={{
-                        width: "100%",
-                        fontFamily: "monospace",
-                        padding: 10,
+                        padding: 12,
+                        border: "1px solid #eee",
+                        borderRadius: 8,
                     }}
-                />
-                <div style={{ marginTop: 8 }}>
-                    <button onClick={handleParseText} disabled={loading}>
-                        {loading ? "Parsing…" : "Parse Text"}
-                    </button>
+                >
+                    <h3>Paste syllabus text</h3>
+                    <textarea
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        rows={8}
+                        style={{
+                            width: "100%",
+                            fontFamily: "monospace",
+                            padding: 10,
+                        }}
+                    />
+                    <div style={{ marginTop: 8 }}>
+                        <button onClick={handleParseText} disabled={loading}>
+                            {loading ? "Parsing…" : "Parse Text"}
+                        </button>
+                    </div>
                 </div>
-            </section>
 
-            <section style={{ marginBottom: 18 }}>
-                <h3>Or upload a file (.txt / .pdf / .docx)</h3>
-                <input
-                    type="file"
-                    accept=".txt,.pdf,.docx"
-                    onChange={handleFileChange}
-                />
-                {fileName && <div>Selected: {fileName}</div>}
-            </section>
+                <div
+                    style={{
+                        padding: 12,
+                        border: "1px solid #eee",
+                        borderRadius: 8,
+                    }}
+                >
+                    <h3>Or upload a file (.txt / .pdf / .docx)</h3>
+                    <input
+                        type="file"
+                        accept=".txt,.pdf,.docx"
+                        onChange={handleFileChange}
+                    />
+                    {fileName && <div>Selected: {fileName}</div>}
+                </div>
+            </div>
 
             {error && <p style={{ color: "crimson" }}>Error: {error}</p>}
 
             {events && (
-                <section>
-                    <h3>Parsed events ({events.length})</h3>
-                    <button onClick={handleExportIcs}>Export .ics</button>
-                    <table
+                <section style={{ marginTop: 20 }}>
+                    <div
                         style={{
-                            width: "100%",
-                            borderCollapse: "collapse",
-                            marginTop: 10,
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
                         }}
                     >
-                        <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Title</th>
-                                <th>Type</th>
-                                <th>Confidence</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {events.map((ev) => (
-                                <tr key={ev.id}>
-                                    <td style={{ padding: 6 }}>{ev.date}</td>
-                                    <td style={{ padding: 6 }}>{ev.title}</td>
-                                    <td style={{ padding: 6 }}>{ev.type}</td>
-                                    <td style={{ padding: 6 }}>
-                                        {(ev.confidence ?? 0).toFixed(2)}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                        <h2>Events ({events.length})</h2>
+                        <div>
+                            <button
+                                onClick={() => setEvents(null)}
+                                style={{ marginRight: 8 }}
+                            >
+                                Clear
+                            </button>
+                            <button onClick={handleExportIcs}>
+                                Export .ics
+                            </button>
+                        </div>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                        <CalendarView
+                            events={events}
+                            onEventsChange={setEvents}
+                        />
+                    </div>
                 </section>
             )}
         </div>
