@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { SyllabusEvent } from "../lib/types";
 import CalendarView from "../components/CalendarView";
+import { inferAcademicFallbackYear } from "../lib/yearHeuristics";
 
 export default function ParsePage() {
     const [text, setText] = useState("");
@@ -16,10 +17,11 @@ export default function ParsePage() {
         setError(null);
         setEvents(null);
         try {
+            const fallbackYear = inferAcademicFallbackYear(text);
             const resp = await fetch("/api/parse", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text }),
+                body: JSON.stringify({ text, fallbackYear }),
             });
             const data = await resp.json();
             if (!resp.ok) throw new Error(data?.error ?? "Parsing failed");
@@ -40,12 +42,14 @@ export default function ParsePage() {
         setLoading(true);
         try {
             const base64 = await readFileAsDataURL(file);
-            const resp = await fetch("/api/upload", {
+            const fallbackYear = inferAcademicFallbackYear(text);
+            const resp = await fetch("/api/llm-parse", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     filename: file.name,
                     dataBase64: base64,
+                    fallbackYear,
                 }),
             });
             const data = await resp.json();
