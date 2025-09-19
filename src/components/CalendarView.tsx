@@ -1,11 +1,9 @@
-// src/components/CalendarView.tsx
 "use client";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/daygrid";
 import timeGridPlugin from "@fullcalendar/timegrid";
 import interactionPlugin from "@fullcalendar/interaction";
 
-// Types come from @fullcalendar/core
 import {
     EventApi,
     EventInput,
@@ -20,17 +18,18 @@ import EventEditor from "./EventEditor";
 export type CalendarViewProps = {
     events: SyllabusEvent[];
     onEventsChange: (events: SyllabusEvent[]) => void;
+    initialDate?: string;
 };
 
 export default function CalendarView({
     events,
     onEventsChange,
+    initialDate,
 }: CalendarViewProps) {
     const [editingEvent, setEditingEvent] = useState<SyllabusEvent | null>(
         null
     );
 
-    // Map SyllabusEvent -> FullCalendar EventInput
     const fcEvents = useMemo<EventInput[]>(
         () =>
             events.map((ev) => {
@@ -45,7 +44,6 @@ export default function CalendarView({
         [events]
     );
 
-    // When user drags or changes date/time, update events list
     const handleEventDropOrResize = useCallback(
         (eventApi: EventApi) => {
             const id = eventApi.id;
@@ -115,6 +113,7 @@ export default function CalendarView({
             <FullCalendar
                 plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
                 initialView="dayGridMonth"
+                initialDate={initialDate}
                 headerToolbar={{
                     left: "prev,next today",
                     center: "title",
@@ -147,7 +146,6 @@ export default function CalendarView({
     );
 }
 
-/* small helper to create id if crypto.randomUUID not available */
 function cryptoRandomId(): string {
     if (
         typeof crypto !== "undefined" &&

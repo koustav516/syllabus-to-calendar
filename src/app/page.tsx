@@ -1,18 +1,60 @@
 // src/app/parse/page.tsx
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SyllabusEvent } from "../lib/types";
 import CalendarView from "../components/CalendarView";
 import { inferAcademicFallbackYear } from "../lib/yearHeuristics";
 
+interface InsertResult {
+    status: "ok" | "error";
+    item?: { htmlLink?: string };
+    error?: string;
+}
+
 export default function ParsePage() {
-    const [text, setText] = useState("");
+    const [text, setText] = useState<string>("");
     const [events, setEvents] = useState<SyllabusEvent[] | null>(null);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [fileName, setFileName] = useState<string | null>(null);
+    const [isConnected, setIsConnected] = useState<boolean | null>(null); // null = loading
 
-    async function handleParseText() {
+    // fetch google connection status
+    async function fetchGoogleStatus(): Promise<void> {
+        try {
+            const resp = await fetch("/api/google/status");
+            if (!resp.ok) {
+                setIsConnected(false);
+                return;
+            }
+            const data = (await resp.json()) as { connected?: boolean };
+            setIsConnected(Boolean(data?.connected));
+        } catch (err) {
+            console.error("Failed to fetch google status", err);
+            setIsConnected(false);
+        }
+    }
+
+    useEffect(() => {
+        fetchGoogleStatus();
+
+        try {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get("connected") === "google") {
+                // remove the query param and re-check status shortly after callback
+                window.history.replaceState(
+                    {},
+                    document.title,
+                    window.location.pathname
+                );
+                setTimeout(() => fetchGoogleStatus(), 300);
+            }
+        } catch {
+            /* ignore on server */
+        }
+    }, []);
+
+    async function handleParseText(): Promise<void> {
         setLoading(true);
         setError(null);
         setEvents(null);
@@ -23,9 +65,12 @@ export default function ParsePage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ text, fallbackYear }),
             });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data?.error ?? "Parsing failed");
-            setEvents(data.events);
+            const data = (await resp.json()) as {
+                events?: SyllabusEvent[];
+                error?: string;
+            };
+            if (!resp.ok) throw new Error(data.error ?? "Parsing failed");
+            setEvents(data.events ?? []);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
@@ -33,7 +78,9 @@ export default function ParsePage() {
         }
     }
 
-    async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    async function handleFileChange(
+        e: React.ChangeEvent<HTMLInputElement>
+    ): Promise<void> {
         const file = e.target.files?.[0];
         if (!file) return;
         setFileName(file.name);
@@ -52,9 +99,12 @@ export default function ParsePage() {
                     fallbackYear,
                 }),
             });
-            const data = await resp.json();
-            if (!resp.ok) throw new Error(data?.error ?? "Upload/parse failed");
-            setEvents(data.events);
+            const data = (await resp.json()) as {
+                events?: SyllabusEvent[];
+                error?: string;
+            };
+            if (!resp.ok) throw new Error(data.error ?? "Upload/parse failed");
+            setEvents(data.events ?? []);
         } catch (err: unknown) {
             setError(err instanceof Error ? err.message : String(err));
         } finally {
@@ -62,7 +112,7 @@ export default function ParsePage() {
         }
     }
 
-    async function handleExportIcs() {
+    async function handleExportIcs(): Promise<void> {
         if (!events || events.length === 0) return alert("No events to export");
         const resp = await fetch("/api/export-ics", {
             method: "POST",
@@ -85,12 +135,32 @@ export default function ParsePage() {
     }
 
     // Redirect user to Google OAuth flow
-    function handleConnectGoogle() {
+    function handleConnectGoogle(): void {
         window.location.href = "/api/google/auth";
     }
 
+    // Disconnect - clears cookie (server route)
+    async function handleDisconnectGoogle(): Promise<void> {
+        try {
+            const resp = await fetch("/api/google/disconnect", {
+                method: "POST",
+            });
+            if (!resp.ok) {
+                const txt = await resp.text();
+                console.error("Disconnect failed", txt);
+                alert("Disconnect failed");
+                return;
+            }
+            await fetchGoogleStatus();
+            alert("Disconnected from Google");
+        } catch (err) {
+            console.error("Disconnect error", err);
+            alert("Disconnect failed");
+        }
+    }
+
     // Send events to Google Calendar
-    async function handleSyncToGoogle() {
+    async function handleSyncToGoogle(): Promise<void> {
         if (!events || events.length === 0) {
             return alert("No events to sync");
         }
@@ -99,13 +169,20 @@ export default function ParsePage() {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ events }),
         });
-        const data = await resp.json();
+        const data = (await resp.json()) as {
+            results?: InsertResult[];
+            error?: string;
+        };
         if (!resp.ok) {
             console.error("Google insert error", data);
-            alert("Sync failed: " + (data?.error ?? "unknown"));
+            alert("Sync failed: " + (data.error ?? "unknown"));
             return;
         }
-        console.log("Google insert result", data);
+        const results = data.results ?? [];
+        const firstLink = results.find(
+            (r) => r.status === "ok" && r.item?.htmlLink
+        )?.item?.htmlLink;
+        if (firstLink) window.open(firstLink, "_blank");
         alert("Events synced to Google Calendar!");
     }
 
@@ -117,7 +194,38 @@ export default function ParsePage() {
                 fontFamily: "system-ui",
             }}
         >
-            <h1>Syllabus → Calendar</h1>
+            <header
+                style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                }}
+            >
+                <h1 style={{ margin: 0 }}>Syllabus → Calendar</h1>
+                <div>
+                    {isConnected === null ? (
+                        <button disabled>Checking Google…</button>
+                    ) : isConnected ? (
+                        <>
+                            <button
+                                onClick={handleSyncToGoogle}
+                                disabled={!events || events.length === 0}
+                                style={{ marginRight: 8 }}
+                            >
+                                Sync to Google
+                            </button>
+                            <button onClick={handleDisconnectGoogle}>
+                                Disconnect Google
+                            </button>
+                        </>
+                    ) : (
+                        <button onClick={handleConnectGoogle}>
+                            Connect Google
+                        </button>
+                    )}
+                </div>
+            </header>
 
             <div style={{ display: "grid", gap: 16 }}>
                 <div
@@ -187,16 +295,16 @@ export default function ParsePage() {
                             >
                                 Export .ics
                             </button>
-                            <button
-                                onClick={handleConnectGoogle}
-                                style={{ marginRight: 8 }}
-                            >
-                                Connect Google
-                            </button>
-                            <button onClick={handleSyncToGoogle}>
-                                Sync to Google
-                            </button>
                         </div>
+                    </div>
+
+                    <div style={{ marginTop: 12 }}>
+                        <CalendarView
+                            key={events.length}
+                            events={events}
+                            onEventsChange={setEvents}
+                            initialDate={events[0]?.date}
+                        />
                     </div>
                 </section>
             )}
