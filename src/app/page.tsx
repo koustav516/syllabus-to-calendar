@@ -84,6 +84,31 @@ export default function ParsePage() {
         URL.revokeObjectURL(url);
     }
 
+    // Redirect user to Google OAuth flow
+    function handleConnectGoogle() {
+        window.location.href = "/api/google/auth";
+    }
+
+    // Send events to Google Calendar
+    async function handleSyncToGoogle() {
+        if (!events || events.length === 0) {
+            return alert("No events to sync");
+        }
+        const resp = await fetch("/api/google/insert", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ events }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+            console.error("Google insert error", data);
+            alert("Sync failed: " + (data?.error ?? "unknown"));
+            return;
+        }
+        console.log("Google insert result", data);
+        alert("Events synced to Google Calendar!");
+    }
+
     return (
         <div
             style={{
@@ -156,17 +181,22 @@ export default function ParsePage() {
                             >
                                 Clear
                             </button>
-                            <button onClick={handleExportIcs}>
+                            <button
+                                onClick={handleExportIcs}
+                                style={{ marginRight: 8 }}
+                            >
                                 Export .ics
                             </button>
+                            <button
+                                onClick={handleConnectGoogle}
+                                style={{ marginRight: 8 }}
+                            >
+                                Connect Google
+                            </button>
+                            <button onClick={handleSyncToGoogle}>
+                                Sync to Google
+                            </button>
                         </div>
-                    </div>
-
-                    <div style={{ marginTop: 12 }}>
-                        <CalendarView
-                            events={events}
-                            onEventsChange={setEvents}
-                        />
                     </div>
                 </section>
             )}
